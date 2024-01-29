@@ -121,32 +121,72 @@ function canBeInfected(node, variant) {
 }
 
 //Function infectZombieA that infects from top to bottom
+// function infectZombieA(node) {
+//     let newNode = JSON.parse(JSON.stringify(node));
+
+//     function propagateZombieAVariant(currentNode) {
+//         if (currentNode.immunizeStatus) {
+//             return currentNode;
+//         }
+
+//         if (currentNode.infectiousStatus && currentNode.variants.includes("ZombieA")) {
+//             if (currentNode.friends) {
+//                 currentNode.friends = currentNode.friends.map(friend => {
+//                     if (canBeInfected(friend, "ZombieA")) {
+//                         friend.infectionStatus = true;
+//                         friend.variants.push("ZombieA");
+//                     }
+//                     return propagateZombieAVariant(friend);
+//                 });
+//             }
+//         } else if (currentNode.friends) {
+//             currentNode.friends = currentNode.friends.map(propagateZombieAVariant);
+//         }
+
+//         return currentNode;
+//     }
+
+//     return propagateZombieAVariant(newNode);
+// }
+
+//Memoize version of infectZombieA function
 function infectZombieA(node) {
     let newNode = JSON.parse(JSON.stringify(node));
+    let cache = {};
 
-    function propagateZombieAVariant(currentNode) {
+    function propagateZombieAVariant(currentNode, nodeId) {
+        if (cache[nodeId]) {
+            return cache[nodeId];
+        }
+
         if (currentNode.immunizeStatus) {
+            cache[nodeId] = currentNode;
             return currentNode;
         }
 
         if (currentNode.infectiousStatus && currentNode.variants.includes("ZombieA")) {
             if (currentNode.friends) {
-                currentNode.friends = currentNode.friends.map(friend => {
+                currentNode.friends = currentNode.friends.map((friend, index) => {
+                    let friendId = nodeId + '-' + index;
                     if (canBeInfected(friend, "ZombieA")) {
                         friend.infectionStatus = true;
                         friend.variants.push("ZombieA");
                     }
-                    return propagateZombieAVariant(friend);
+                    return propagateZombieAVariant(friend, friendId);
                 });
             }
         } else if (currentNode.friends) {
-            currentNode.friends = currentNode.friends.map(propagateZombieAVariant);
+            currentNode.friends = currentNode.friends.map((friend, index) => {
+                let friendId = nodeId + '-' + index;
+                return propagateZombieAVariant(friend, friendId);
+            });
         }
 
+        cache[nodeId] = currentNode;
         return currentNode;
     }
 
-    return propagateZombieAVariant(newNode);
+    return propagateZombieAVariant(newNode, 'root');
 }
 
 let treeAfterZombieA = infectZombieA(peopleTree);
@@ -155,26 +195,49 @@ console.log("After Zombie-A infection", JSON.stringify(treeAfterZombieA));
 console.log("--------------------------------------------------");
 
 //InfectZombieB function that infects from bottom to top
-function infectZombieB(node) {
-    let newNode = JSON.parse(JSON.stringify(node));
+// function infectZombieB(node) {
+//     let newNode = JSON.parse(JSON.stringify(node));
 
-    if (newNode.friends) {
-        let infectedFriends = newNode.friends.map(infectZombieB);
+//     if (newNode.friends) {
+//         let infectedFriends = newNode.friends.map(infectZombieB);
 
-        let hasZombieBVariant = infectedFriends.some(friend => friend.variants.includes("ZombieB") && friend.infectiousStatus && friend.infectionStatus);
-        if (hasZombieBVariant && canBeInfected(newNode, "ZombieB")) {
-            newNode.infectionStatus = true;
-            newNode.variants.push("ZombieB");
+//         let hasZombieBVariant = infectedFriends.some(friend => friend.variants.includes("ZombieB") && friend.infectiousStatus && friend.infectionStatus);
+//         if (hasZombieBVariant && canBeInfected(newNode, "ZombieB")) {
+//             newNode.infectionStatus = true;
+//             newNode.variants.push("ZombieB");
+//         }
+
+//         newNode.friends = infectedFriends;
+//     }
+
+//     return newNode;
+// }
+
+// let treeAfterZombieB = infectZombieB(treeAfterZombieA);
+// console.log("After Zombie-B infection", JSON.stringify(treeAfterZombieB));
+
+//Monadic version of infectZombieB function
+function TreeMonad(node) {
+    this.node = JSON.parse(JSON.stringify(node));
+
+    this.infectZombieB = function() {
+        if (this.node.friends) {
+            this.node.friends = this.node.friends.map(friend => new TreeMonad(friend).infectZombieB().node);
+
+            let hasZombieBVariant = this.node.friends.some(friend => friend.variants.includes("ZombieB") && friend.infectiousStatus && friend.infectionStatus);
+            if (hasZombieBVariant && canBeInfected(this.node, "ZombieB")) {
+                this.node.infectionStatus = true;
+                this.node.variants.push("ZombieB");
+            }
         }
 
-        newNode.friends = infectedFriends;
-    }
-
-    return newNode;
+        return this;
+    };
 }
 
-let treeAfterZombieB = infectZombieB(treeAfterZombieA);
-console.log("After Zombie-B infection", JSON.stringify(treeAfterZombieB));
+// Utilisation de la monade
+let infectedTree = new TreeMonad(peopleTree).infectZombieB().node;
+console.log("After Zombie-B infection", JSON.stringify(infectedTree));
 
 console.log("--------------------------------------------------");
 
@@ -202,7 +265,8 @@ function infectZombieC(node) {
     return newNode;
 }
 
-let treeAfterZombieC = infectZombieC(treeAfterZombieB);
+// let treeAfterZombieC = infectZombieC(treeAfterZombieB);
+let treeAfterZombieC = infectZombieC(infectedTree);
 console.log("After Zombie-C infection", JSON.stringify(treeAfterZombieC));
 
 console.log("--------------------------------------------------");
